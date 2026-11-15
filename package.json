@@ -1,0 +1,12 @@
+{
+  "name": "senderwatch",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "monitor": "node monitor.js",
+    "test": "node --test test.js",
+    "dev": "npx --yes serve -l 4321 ."
+  },
+  "engines": { "node": ">=18" }
+}

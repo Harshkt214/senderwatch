@@ -1,0 +1,355 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Senderwatch</title>
+<meta name="description" content="Daily health checks for every cold email domain you own. SPF, DKIM, DMARC, MX and domain age, with a Slack alert the morning something breaks.">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Sora:wght@500;600;700&family=IBM+Plex+Sans:wght@400;500;600&family=JetBrains+Mono:wght@400;500&display=swap">
+<style>
+/* Layout: an ops console. Hero is the live checker; everything below argues for the paid monitor. */
+:root {
+  --bg: #f4f6f9; --surface: #ffffff; --ink: #0e1a2b; --muted: #5a6779; --line: #dde3eb;
+  --accent: #2343e6; --accent-ink: #ffffff;
+  --ok: #0f8a5f; --warn: #b86e00; --bad: #c72e3b;
+  --ok-bg: #e3f4ec; --warn-bg: #fdf0da; --bad-bg: #fbe5e7;
+  --display: 'Sora', 'Segoe UI', system-ui, sans-serif;
+  --body: 'IBM Plex Sans', system-ui, -apple-system, sans-serif;
+  --mono: 'JetBrains Mono', ui-monospace, 'SFMono-Regular', Menlo, monospace;
+  color-scheme: light;
+}
+@media (prefers-color-scheme: dark) {
+  :root {
+    --bg: #0b1220; --surface: #121b2c; --ink: #e7ecf4; --muted: #94a1b5; --line: #24304a;
+    --accent: #6b83ff; --accent-ink: #0b1220;
+    --ok: #3fcf95; --warn: #f2ae45; --bad: #ff6b78;
+    --ok-bg: #0f2a22; --warn-bg: #2d2311; --bad-bg: #321820;
+    color-scheme: dark;
+  }
+}
+* { box-sizing: border-box; }
+html { -webkit-text-size-adjust: 100%; }
+body { margin: 0; background: var(--bg); color: var(--ink); font: 16px/1.6 var(--body); }
+a { color: var(--accent); }
+.wrap { max-width: 1120px; margin: 0 auto; padding-left: max(20px, env(safe-area-inset-left, 0px)); padding-right: max(20px, env(safe-area-inset-right, 0px)); }
+h1, h2, h3 { font-family: var(--display); line-height: 1.15; text-wrap: balance; margin: 0; }
+h1 { font-size: clamp(2rem, 4.6vw, 3.4rem); font-weight: 700; letter-spacing: -0.02em; }
+h2 { font-size: clamp(1.5rem, 3vw, 2.2rem); font-weight: 600; letter-spacing: -0.01em; }
+h3 { font-size: 1.1rem; font-weight: 600; }
+p { margin: 0; }
+.eyebrow { font: 500 0.75rem/1 var(--mono); letter-spacing: 0.08em; text-transform: uppercase; color: var(--muted); }
+.lede { font-size: 1.15rem; color: var(--muted); max-width: 60ch; }
+button, .btn { font: 600 0.95rem/1 var(--body); border-radius: 8px; border: 1px solid transparent; padding: 13px 18px; cursor: pointer; text-decoration: none; display: inline-flex; align-items: center; gap: 8px; }
+.btn-primary { background: var(--accent); color: var(--accent-ink); }
+.btn-primary:hover { filter: brightness(1.08); }
+.btn-ghost { background: transparent; color: var(--ink); border-color: var(--line); }
+button:focus-visible, a:focus-visible, textarea:focus-visible, input:focus-visible { outline: 3px solid var(--accent); outline-offset: 2px; }
+button:disabled { opacity: 0.6; cursor: progress; }
+
+/* Nav */
+nav { padding-block: 18px; }
+nav .wrap { display: flex; align-items: center; justify-content: space-between; gap: 16px; }
+.logo { font: 700 1.15rem/1 var(--display); display: flex; align-items: center; gap: 10px; color: var(--ink); text-decoration: none; }
+.logo-mark { width: 22px; height: 22px; border-radius: 50%; border: 2px solid var(--accent); position: relative; }
+.logo-mark::after { content: ""; position: absolute; inset: 4px; border-radius: 50%; background: var(--accent); }
+nav .links { display: flex; gap: 22px; align-items: center; font-size: 0.95rem; }
+nav .links a:not(.btn) { color: var(--muted); text-decoration: none; }
+@media (max-width: 640px) { nav .links a:not(.btn) { display: none; } }
+
+/* Hero */
+.hero { padding-block: 40px 56px; }
+.hero-grid { display: grid; grid-template-columns: 1fr 1.15fr; gap: 48px; align-items: start; }
+.hero-copy { display: flex; flex-direction: column; gap: 20px; padding-top: 12px; }
+.proof { display: flex; flex-wrap: wrap; gap: 8px 18px; font: 400 0.85rem/1.4 var(--mono); color: var(--muted); }
+.proof span::before { content: "✓ "; color: var(--ok); }
+@media (max-width: 900px) { .hero-grid { grid-template-columns: 1fr; gap: 28px; } }
+
+/* Console */
+.console { background: var(--surface); border: 1px solid var(--line); border-radius: 12px; box-shadow: 0 1px 2px rgb(14 26 43 / 0.04), 0 12px 32px -12px rgb(14 26 43 / 0.14); overflow: hidden; min-width: 0; }
+.console-head { display: flex; justify-content: space-between; align-items: center; gap: 12px; padding: 12px 16px; border-bottom: 1px solid var(--line); }
+.console-body { padding: 16px; display: flex; flex-direction: column; gap: 12px; }
+label.eyebrow { display: block; }
+textarea { width: 100%; min-height: 92px; resize: vertical; font: 400 0.9rem/1.5 var(--mono); color: var(--ink); background: var(--bg); border: 1px solid var(--line); border-radius: 8px; padding: 10px 12px; }
+.console-actions { display: flex; flex-wrap: wrap; gap: 10px; align-items: center; justify-content: space-between; }
+.hint { font-size: 0.8rem; color: var(--muted); }
+.results { display: flex; flex-direction: column; border-top: 1px solid var(--line); }
+.row { border-bottom: 1px solid var(--line); }
+.row:last-child { border-bottom: 0; }
+.row-head { width: 100%; display: grid; grid-template-columns: 52px 1fr auto; gap: 14px; align-items: center; padding: 12px 16px; background: none; border: 0; border-radius: 0; color: var(--ink); text-align: left; font-weight: 400; }
+.row-head:hover { background: var(--bg); }
+.score { font: 600 1.15rem/1 var(--mono); font-variant-numeric: tabular-nums; text-align: center; padding: 8px 0; border-radius: 6px; }
+.g-ok { color: var(--ok); background: var(--ok-bg); } .g-warn { color: var(--warn); background: var(--warn-bg); } .g-bad { color: var(--bad); background: var(--bad-bg); }
+.dom { min-width: 0; }
+.dom strong { font: 500 0.95rem/1.3 var(--mono); display: block; overflow-wrap: anywhere; }
+.dots { display: flex; gap: 6px; margin-top: 6px; flex-wrap: wrap; }
+.dot { font: 500 0.68rem/1 var(--mono); padding: 4px 6px; border-radius: 4px; letter-spacing: 0.03em; }
+.s-pass { color: var(--ok); background: var(--ok-bg); } .s-warn, .s-unknown { color: var(--warn); background: var(--warn-bg); } .s-fail { color: var(--bad); background: var(--bad-bg); }
+.chev { color: var(--muted); font-size: 0.85rem; transition: transform 0.15s; }
+.row.open .chev { transform: rotate(90deg); }
+.detail { padding: 0 16px 14px 82px; display: none; flex-direction: column; gap: 10px; }
+.row.open .detail { display: flex; }
+.detail-item { display: grid; grid-template-columns: 92px 1fr; gap: 10px; font-size: 0.88rem; }
+.detail-item code { display: block; margin-top: 4px; font: 400 0.75rem/1.45 var(--mono); color: var(--muted); overflow-wrap: anywhere; }
+@media (max-width: 520px) { .detail { padding-left: 16px; } .detail-item { grid-template-columns: 1fr; gap: 2px; } }
+.loading { padding: 18px 16px; font: 400 0.85rem var(--mono); color: var(--muted); }
+.err { color: var(--bad); font-size: 0.88rem; }
+
+/* Sections */
+section { padding-block: 72px; }
+section + section { border-top: 1px solid var(--line); }
+.section-head { display: flex; flex-direction: column; gap: 12px; margin-bottom: 36px; max-width: 720px; }
+.grid-3 { display: grid; grid-template-columns: repeat(3, 1fr); gap: 20px; }
+@media (max-width: 860px) { .grid-3 { grid-template-columns: 1fr; } }
+.pain { display: flex; flex-direction: column; gap: 10px; }
+.pain .num { font: 600 2rem/1 var(--mono); color: var(--accent); font-variant-numeric: tabular-nums; }
+.pain p { color: var(--muted); }
+
+.steps { display: grid; grid-template-columns: repeat(4, 1fr); gap: 0; border: 1px solid var(--line); border-radius: 12px; background: var(--surface); overflow: hidden; }
+.step { padding: 22px; display: flex; flex-direction: column; gap: 8px; border-right: 1px solid var(--line); }
+.step:last-child { border-right: 0; }
+.step .t { font: 500 0.75rem/1 var(--mono); color: var(--accent); }
+.step p { color: var(--muted); font-size: 0.93rem; }
+@media (max-width: 860px) { .steps { grid-template-columns: 1fr 1fr; } .step:nth-child(2) { border-right: 0; } .step:nth-child(-n+2) { border-bottom: 1px solid var(--line); } }
+@media (max-width: 520px) { .steps { grid-template-columns: 1fr; } .step { border-right: 0; border-bottom: 1px solid var(--line); } .step:last-child { border-bottom: 0; } }
+
+.slack { margin-top: 28px; background: var(--surface); border: 1px solid var(--line); border-radius: 12px; padding: 18px 20px; font: 400 0.85rem/1.7 var(--mono); overflow-x: auto; }
+.slack .who { font-family: var(--body); font-weight: 600; }
+.slack .time { color: var(--muted); font-weight: 400; margin-left: 6px; }
+
+.plans { display: grid; grid-template-columns: repeat(3, 1fr); gap: 20px; align-items: stretch; }
+@media (max-width: 860px) { .plans { grid-template-columns: 1fr; } }
+.plan { background: var(--surface); border: 1px solid var(--line); border-radius: 12px; padding: 24px; display: flex; flex-direction: column; gap: 14px; }
+.plan.featured { border: 2px solid var(--accent); }
+.price { font: 600 2.2rem/1 var(--display); }
+.price small { font: 400 0.9rem var(--body); color: var(--muted); }
+.inr { font: 400 0.8rem var(--mono); color: var(--muted); }
+.plan ul { margin: 0; padding: 0; list-style: none; display: flex; flex-direction: column; gap: 8px; font-size: 0.93rem; }
+.plan li::before { content: "→ "; color: var(--accent); }
+.plan .btn { margin-top: auto; justify-content: center; }
+.tag { align-self: flex-start; font: 500 0.7rem/1 var(--mono); letter-spacing: 0.06em; text-transform: uppercase; background: var(--accent); color: var(--accent-ink); padding: 5px 8px; border-radius: 4px; }
+
+.waitlist { display: grid; grid-template-columns: 1fr 1fr; gap: 40px; align-items: center; }
+@media (max-width: 860px) { .waitlist { grid-template-columns: 1fr; } }
+form { display: flex; flex-direction: column; gap: 12px; background: var(--surface); border: 1px solid var(--line); border-radius: 12px; padding: 22px; }
+input, select { font: 400 1rem var(--body); color: var(--ink); background: var(--bg); border: 1px solid var(--line); border-radius: 8px; padding: 12px; width: 100%; }
+.form-row { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+@media (max-width: 520px) { .form-row { grid-template-columns: 1fr; } }
+.ok-msg { color: var(--ok); font-weight: 500; }
+
+details { border-bottom: 1px solid var(--line); padding-block: 16px; }
+details summary { cursor: pointer; font-weight: 600; }
+details p { margin-top: 10px; color: var(--muted); max-width: 70ch; }
+footer { padding-block: 32px; color: var(--muted); font-size: 0.85rem; border-top: 1px solid var(--line); }
+@media (prefers-reduced-motion: reduce) { * { transition: none !important; } }
+</style>
+</head>
+<body>
+<nav>
+  <div class="wrap">
+    <a class="logo" href="#"><span class="logo-mark" aria-hidden="true"></span>Senderwatch</a>
+    <div class="links">
+      <a href="#how">How it works</a>
+      <a href="#pricing">Pricing</a>
+      <a class="btn btn-primary" href="#waitlist">Get early access</a>
+    </div>
+  </div>
+</nav>
+
+<header class="hero">
+  <div class="wrap hero-grid">
+    <div class="hero-copy">
+      <span class="eyebrow">For founders and agencies running cold outbound</span>
+      <h1>Know which sending domain broke before your reply rate does.</h1>
+      <p class="lede">Senderwatch checks every cold email domain you own each morning: SPF, DKIM, DMARC, MX and domain age. When something breaks, you get a Slack alert that names the domain and the fix.</p>
+      <div class="proof"><span>Works with Instantly, Smartlead, Lemlist, Apollo</span><span>Read-only DNS, no inbox access</span><span>Set up in 5 minutes</span></div>
+    </div>
+
+    <div class="console" aria-label="Free domain health check">
+      <div class="console-head">
+        <span class="eyebrow">Free check · up to 10 domains</span>
+        <span class="eyebrow" id="stamp"></span>
+      </div>
+      <div class="console-body">
+        <label class="eyebrow" for="domains">Your sending domains, one per line</label>
+        <textarea id="domains" spellcheck="false">hubspot.com
+lemlist.com
+instantly.ai</textarea>
+        <div class="console-actions">
+          <span class="hint">Examples loaded. Replace them with your own domains.</span>
+          <button class="btn-primary" id="run" type="button">Check domains</button>
+        </div>
+      </div>
+      <div class="results" id="results" aria-live="polite"></div>
+    </div>
+  </div>
+</header>
+
+<section>
+  <div class="wrap">
+    <div class="section-head">
+      <span class="eyebrow">The problem</span>
+      <h2>Outbound runs on 10 to 300 domains. Nobody watches them.</h2>
+      <p class="lede">You buy secondary domains, set up Workspace inboxes and connect them to a sequencer. Three weeks later a DNS edit, an expired key or a forgotten DMARC record quietly sends everything to spam. Your sequencer still shows "sent".</p>
+    </div>
+    <div class="grid-3">
+      <div class="pain"><span class="num">5,000/day</span><h3>Bulk sender rules apply</h3><p>Gmail, Yahoo and Microsoft now require SPF, DKIM and aligned DMARC. Gmail started rejecting non-compliant mail at the SMTP level in late 2025.</p></div>
+      <div class="pain"><span class="num">2–3 weeks</span><h3>Before most teams notice</h3><p>Deliverability problems show up as a slow drop in replies. By the time someone checks, a month of leads has gone to spam.</p></div>
+      <div class="pain"><span class="num">15 tabs</span><h3>To check it by hand</h3><p>MXToolbox, Postmaster Tools, the sequencer, the registrar. Repeated for every domain and every client, every week.</p></div>
+    </div>
+  </div>
+</section>
+
+<section id="how">
+  <div class="wrap">
+    <div class="section-head">
+      <span class="eyebrow">How it works</span>
+      <h2>One list of domains. One alert channel.</h2>
+    </div>
+    <div class="steps">
+      <div class="step"><span class="t">Step 1</span><h3>Add domains</h3><p>Paste them or import from Instantly or Smartlead. Tag each one by client.</p></div>
+      <div class="step"><span class="t">Step 2</span><h3>Daily scan</h3><p>Every morning we check SPF, DKIM, DMARC, MX, domain age and blocklists.</p></div>
+      <div class="step"><span class="t">Step 3</span><h3>Alert on change</h3><p>A Slack message only when something gets worse. No daily noise.</p></div>
+      <div class="step"><span class="t">Step 4</span><h3>Fix it</h3><p>Every alert includes the exact DNS record to add or change.</p></div>
+    </div>
+    <div class="slack" aria-label="Example Slack alert">
+      <div><span class="who">Senderwatch</span><span class="time">8:47 AM</span></div>
+      <div>Senderwatch daily: 41/44 domains healthy.</div>
+      <div>🚨 <b>getacme-mail.com</b> (Acme Inc): DMARC failing. No DMARC record. Gmail, Yahoo and Outlook require one for bulk senders.</div>
+      <div>📉 <b>tryacme.io</b> (Acme Inc) fell from 90 to 65.</div>
+    </div>
+  </div>
+</section>
+
+<section id="pricing">
+  <div class="wrap">
+    <div class="section-head">
+      <span class="eyebrow">Pricing</span>
+      <h2>Priced per domain, cheaper than one lost meeting.</h2>
+      <p class="lede">Early access members keep their launch price for life.</p>
+    </div>
+    <div class="plans">
+      <div class="plan">
+        <h3>Founder</h3>
+        <div class="price">$29<small> /month</small></div>
+        <span class="inr">₹1,999 /month in India</span>
+        <ul><li>Up to 15 domains</li><li>Daily checks</li><li>Slack and email alerts</li><li>Fix instructions on every alert</li></ul>
+        <a class="btn btn-ghost" href="#waitlist">Join waitlist</a>
+      </div>
+      <div class="plan featured">
+        <span class="tag">For agencies</span>
+        <h3>Agency</h3>
+        <div class="price">$149<small> /month</small></div>
+        <span class="inr">₹9,999 /month in India</span>
+        <ul><li>Up to 250 domains</li><li>Group domains by client</li><li>Blocklist monitoring</li><li>White-label weekly client report</li><li>Instantly and Smartlead import</li></ul>
+        <a class="btn btn-primary" href="#waitlist">Join waitlist</a>
+      </div>
+      <div class="plan">
+        <h3>Done for you</h3>
+        <div class="price">$499<small> one-time</small></div>
+        <span class="inr">₹29,999 in India</span>
+        <ul><li>We audit every domain and inbox</li><li>We fix SPF, DKIM and DMARC records</li><li>3 months of Agency plan included</li></ul>
+        <a class="btn btn-ghost" href="#waitlist">Book an audit</a>
+      </div>
+    </div>
+  </div>
+</section>
+
+<section id="waitlist">
+  <div class="wrap waitlist">
+    <div class="section-head" style="margin:0">
+      <span class="eyebrow">Early access</span>
+      <h2>The first 20 teams get a free domain audit.</h2>
+      <p class="lede">Tell us how many domains you send from. We will run the full check, send you the report, and set up your daily alerts by hand.</p>
+    </div>
+    <form id="wl" novalidate>
+      <label class="eyebrow" for="wl-email">Work email</label>
+      <input id="wl-email" name="email" type="email" required placeholder="you@company.com" autocomplete="email">
+      <div class="form-row">
+        <div><label class="eyebrow" for="wl-count">Sending domains</label>
+          <select id="wl-count" name="domains"><option>1–10</option><option>11–50</option><option>51–200</option><option>200+</option></select></div>
+        <div><label class="eyebrow" for="wl-role">You are</label>
+          <select id="wl-role" name="role"><option>SaaS founder</option><option>Lead gen agency</option><option>Sales / RevOps lead</option><option>Other</option></select></div>
+      </div>
+      <button class="btn-primary" type="submit" id="wl-btn">Request my free audit</button>
+      <p id="wl-msg" class="hint" role="status"></p>
+    </form>
+  </div>
+</section>
+
+<section>
+  <div class="wrap">
+    <div class="section-head"><span class="eyebrow">Questions</span><h2>Common questions</h2></div>
+    <details><summary>Do you need access to my inboxes or sequencer?</summary><p>No. Every check reads public DNS records. Nothing touches your mailboxes, and we never see email content.</p></details>
+    <details><summary>My sequencer already has warm-up and health scores. Why do I need this?</summary><p>Sequencer health scores cover the inboxes connected to that one tool. Senderwatch watches the domains themselves, across every tool and client, and tells you when DNS changes break them.</p></details>
+    <details><summary>Why did DKIM show a warning when I know it is set up?</summary><p>The free check tries the 12 most common selectors. If your provider uses a custom selector, add it in your account and the daily check will use it.</p></details>
+  </div>
+</section>
+
+<footer><div class="wrap">Senderwatch · Domain health for cold outbound · US · UK · India</div></footer>
+
+<script type="module">
+import { checkDomain, CHECK_LABELS, normalizeDomain } from './checks.js';
+
+// Paste a Formspree, Tally or Make.com webhook URL here to collect signups.
+const WAITLIST_ENDPOINT = '';
+const MAX = 10;
+const $ = id => document.getElementById(id);
+const esc = s => String(s).replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+const gradeClass = g => g === 'Healthy' ? 'g-ok' : g === 'At risk' ? 'g-warn' : 'g-bad';
+const statusWord = { pass: 'OK', warn: 'WARN', fail: 'FAIL', unknown: '?' };
+
+function rowHtml(r) {
+  if (r.error) return `<div class="row"><div class="row-head"><span class="score g-bad">--</span><div class="dom"><strong>${esc(r.domain)}</strong><span class="err">${esc(r.error)}</span></div><span></span></div></div>`;
+  const dots = Object.entries(r.checks).map(([k, c]) => `<span class="dot s-${c.status}" title="${esc(c.detail)}">${CHECK_LABELS[k]} ${statusWord[c.status]}</span>`).join('');
+  const detail = Object.entries(r.checks).map(([k, c]) => `<div class="detail-item"><span class="eyebrow">${CHECK_LABELS[k]}</span><div>${esc(c.detail)}${c.record ? `<code>${esc(c.record)}</code>` : ''}</div></div>`).join('');
+  return `<div class="row"><button class="row-head" type="button" aria-expanded="false"><span class="score ${gradeClass(r.grade)}">${r.score}</span><div class="dom"><strong>${esc(r.domain)}</strong><div class="dots">${dots}</div></div><span class="chev" aria-hidden="true">▶</span></button><div class="detail">${detail}</div></div>`;
+}
+
+async function run() {
+  const list = [...new Set($('domains').value.split(/[\n,]+/).map(normalizeDomain).filter(Boolean))].slice(0, MAX);
+  const out = $('results');
+  if (!list.length) { out.innerHTML = '<div class="loading">Add at least one domain to check.</div>'; return; }
+  $('run').disabled = true; $('run').textContent = 'Checking…';
+  out.innerHTML = list.map(d => `<div class="row" data-d="${esc(d)}"><div class="loading">Checking ${esc(d)}…</div></div>`).join('');
+  await Promise.all(list.map(async d => {
+    let r;
+    try { r = await checkDomain(d); } catch (e) { r = { domain: d, error: 'DNS lookup failed. Check your connection and try again.' }; }
+    const slot = out.querySelector(`[data-d="${CSS.escape(d)}"]`);
+    if (slot) slot.outerHTML = rowHtml(r);
+  }));
+  $('stamp').textContent = 'Checked ' + new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+  $('run').disabled = false; $('run').textContent = 'Check domains';
+}
+
+$('results').addEventListener('click', e => {
+  const head = e.target.closest('button.row-head'); if (!head) return;
+  const row = head.parentElement; row.classList.toggle('open');
+  head.setAttribute('aria-expanded', row.classList.contains('open'));
+});
+$('run').addEventListener('click', run);
+run();
+
+$('wl').addEventListener('submit', async e => {
+  e.preventDefault();
+  const msg = $('wl-msg'), email = $('wl-email').value.trim();
+  if (!/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(email)) { msg.className = 'err'; msg.textContent = 'Enter a valid work email, like you@company.com.'; return; }
+  const data = { email, domains: $('wl-count').value, role: $('wl-role').value, checked: $('domains').value.trim(), at: new Date().toISOString() };
+  $('wl-btn').disabled = true;
+  try {
+    if (WAITLIST_ENDPOINT) {
+      const res = await fetch(WAITLIST_ENDPOINT, { method: 'POST', headers: { 'content-type': 'application/json', accept: 'application/json' }, body: JSON.stringify(data) });
+      if (!res.ok) throw new Error(res.status);
+    } else {
+      try { const k = 'senderwatch-waitlist'; localStorage.setItem(k, JSON.stringify([...(JSON.parse(localStorage.getItem(k) || '[]')), data])); } catch {}
+    }
+    msg.className = 'ok-msg'; msg.textContent = "You're on the list. We'll email you within 24 hours to schedule your audit.";
+    e.target.reset();
+  } catch {
+    msg.className = 'err'; msg.textContent = 'Signup did not go through. Try again in a minute.';
+  } finally { $('wl-btn').disabled = false; }
+});
+</script>
+</body>
+</html>
