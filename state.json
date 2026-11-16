@@ -1,0 +1,70 @@
+{
+  "getacme-mail.com": {
+    "domain": "getacme-mail.com",
+    "client": "Acme Inc",
+    "score": 10,
+    "grade": "Critical",
+    "checks": {
+      "spf": {
+        "status": "fail",
+        "points": 0,
+        "detail": "No SPF record. Receivers cannot tell which servers may send for you."
+      },
+      "dkim": {
+        "status": "warn",
+        "points": 5,
+        "detail": "No key on 12 common selectors. If you use a custom selector, add it to your watchlist."
+      },
+      "dmarc": {
+        "status": "fail",
+        "points": 0,
+        "detail": "No DMARC record. Gmail, Yahoo and Outlook require one for bulk senders."
+      },
+      "mx": {
+        "status": "fail",
+        "points": 0,
+        "detail": "No MX record. Replies and bounces have nowhere to go, which hurts reputation."
+      },
+      "age": {
+        "status": "unknown",
+        "points": 5,
+        "detail": "Registration date not available for this TLD."
+      }
+    },
+    "checkedAt": "2026-11-16T11:27:04.617Z"
+  },
+  "tryacme.io": {
+    "domain": "tryacme.io",
+    "client": "Acme Inc",
+    "score": 10,
+    "grade": "Critical",
+    "checks": {
+      "spf": {
+        "status": "fail",
+        "points": 0,
+        "detail": "No SPF record. Receivers cannot tell which servers may send for you."
+      },
+      "dkim": {
+        "status": "warn",
+        "points": 5,
+        "detail": "No key on 12 common selectors. If you use a custom selector, add it to your watchlist."
+      },
+      "dmarc": {
+        "status": "fail",
+        "points": 0,
+        "detail": "No DMARC record. Gmail, Yahoo and Outlook require one for bulk senders."
+      },
+      "mx": {
+        "status": "fail",
+        "points": 0,
+        "detail": "No MX record. Replies and bounces have nowhere to go, which hurts reputation."
+      },
+      "age": {
+        "status": "unknown",
+        "points": 5,
+        "detail": "Registration date not available for this TLD."
+      }
+    },
+    "checkedAt": "2026-11-16T11:27:04.639Z"
+  }
+}
