@@ -31,7 +31,7 @@
         "detail": "Registration date not available for this TLD."
       }
     },
-    "checkedAt": "2026-11-25T12:59:47.116Z"
+    "checkedAt": "2026-11-26T12:40:39.148Z"
   },
   "tryacme.io": {
     "domain": "tryacme.io",
@@ -65,6 +65,6 @@
         "detail": "Registration date not available for this TLD."
       }
     },
-    "checkedAt": "2026-11-25T12:59:47.133Z"
+    "checkedAt": "2026-11-26T12:40:39.166Z"
   }
 }
